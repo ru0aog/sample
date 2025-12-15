@@ -22,7 +22,7 @@ jobs:
       - name: Clean buildozer cache
         run: rm -rf .buildozer
 
-      - name: Install system dependencies
+      - name: Install system and Python dependencies
         run: |
           apt-get update
           apt-get install -y \
@@ -38,11 +38,10 @@ jobs:
             python3-pip \
             python3-venv
 
-      # Явная проверка и установка pip
-      - name: Ensure pip is available
+      - name: Upgrade pip and install packages
         run: |
-          python3 -m ensurepip --upgrade
-          python3 -m pip install --upgrade pip setuptools wheel
+          pip3 install --upgrade pip setuptools wheel
+          pip3 install cython buildozer kivy==2.2.1
 
 
       - name: Install Python packages
