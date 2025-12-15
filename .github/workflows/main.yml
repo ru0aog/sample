@@ -223,16 +223,16 @@ jobs:
             sed -i "s/^fullscreen =.*/fullscreen = 1/" buildozer.spec
           '
 
+
       - name: Build APK with retries
         run: |
           sudo -u runner -H sh -c "
-            export JAVA_HOME=$JAVA_HOME
-            export ANDROID_HOME=$ANDROID_HOME
-            export ANDROID_NDK_HOME=$ANDROID_NDK_HOME
-            export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+            export JAVA_HOME='$JAVA_HOME'
+            export ANDROID_HOME='$ANDROID_HOME'
+            export ANDROID_NDK_HOME='$ANDROID_NDK_HOME'
+            export PATH='$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH'
+            cd '$GITHUB_WORKSPACE'
 
-
-            # Выполняем сборку с повторными попытками
             i=1
             while [ $i -le 3 ]; do
               echo 'Attempt #'$i' to build APK...'
@@ -242,7 +242,7 @@ jobs:
               else
                 echo 'Build failed, retrying in 10s...'
                 sleep 10
-                i=$(expr $i + 1)  # Используем expr вместо $((...))
+                i=$(expr $i + 1)
               fi
             done
           "
