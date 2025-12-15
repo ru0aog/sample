@@ -14,6 +14,7 @@ jobs:
       image: ubuntu:22.04
       options: --shm-size=4g --ulimit memlock=-1
 
+
     steps:
       - name: Create non-root user and install sudo
         run: |
@@ -25,10 +26,8 @@ jobs:
           echo "RUNNER_UID=1001" >> $GITHUB_ENV
           echo "RUNNER_GID=1001" >> $GITHUB_ENV
 
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
 
       - name: Fix repository ownership
         run: chown -R runner:runner $GITHUB_WORKSPACE
@@ -57,7 +56,6 @@ jobs:
           pip3 install --upgrade pip setuptools wheel
           pip3 install cython buildozer kivy==2.2.1
 
-
       - name: Accept Android SDK licenses
         run: |
           sudo -u runner -H sh -c '
@@ -73,10 +71,8 @@ jobs:
           sudo -u runner -H mkdir -p $CMDLINE_DIR
           cd $CMDLINE_DIR
 
-
           curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q cmdline-tools.zip
-
 
           UNPACKED_DIR=""
           if [ -d "cmdline-tools" ]; then
@@ -101,7 +97,7 @@ jobs:
         run: |
           JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
-          ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r29d
+          ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r29
 
 
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
@@ -132,20 +128,18 @@ jobs:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-
       - name: Create fake tools/bin directory
         run: |
           SDK_ROOT=$ANDROID_HOME
           sudo -u runner -H mkdir -p $SDK_ROOT/tools/bin
           sudo -u runner -H ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
 
+
       - name: Cache NDK
-        uses: actions/cache@v3
+        uses: actions/cache@v4  # Обновлён до v4
         with:
           path: /home/runner/.buildozer/android/platform/android-ndk-r29
           key: ndk-r29
-
-
 
       - name: Pre-download Android NDK r29 with validation
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -154,7 +148,8 @@ jobs:
           NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
           NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}.zip"
           NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}"
-          MIN_SIZE=700000000  # 700 МБ (ориентировочно для r29)
+          MIN_SIZE=700000000  # 700 МБ
+
 
           sudo -u runner -H sh -c "
             # Очищаем старые файлы
@@ -162,8 +157,9 @@ jobs:
             rm -rf '${NDK_DIR}'
 
 
-            # Скачиваем с ретраями
-            for i in {1..5}; do
+            # Скачиваем с ретраями (используем классический цикл)
+            i=1
+            while [ $i -le 5 ]; do
               echo 'Downloading NDK (attempt #'$i')...'
               if wget --timeout=120 --tries=3 -q --show-progress -O '${NDK_ZIP}' '${NDK_URL}'; then
                 echo 'Download OK'
@@ -171,9 +167,10 @@ jobs:
               fi
               echo 'Retry in 10s...'
               sleep 10
+              i=$((i + 1))
             done
 
-            # Проверяем наличие и размер файла
+           # Проверяем наличие и размер файла
             if [ ! -f '${NDK_ZIP}' ]; then
               echo 'ERROR: NDK archive not found after download'
               exit 1
@@ -184,7 +181,7 @@ jobs:
               echo "ERROR: NDK file too small (${FILE_SIZE} < ${MIN_SIZE} bytes)"
               exit 1
             fi
-
+ 
             # Проверяем целостность архива
             if ! unzip -t '${NDK_ZIP}' >/dev/null 2>&1; then
               echo 'ERROR: Corrupted NDK archive'
@@ -196,12 +193,6 @@ jobs:
             rm '${NDK_ZIP}'
             echo 'NDK installed to ${NDK_DIR}'
           "
-
-
-
-
-
-
 
       - name: Prepare buildozer spec
         run: |
@@ -215,10 +206,11 @@ jobs:
             # Указываем API уровни
             sed -i "s/^android.api =.*/android.api = 34/" buildozer.spec
             sed -i "s/^android.minapi =.*/android.minapi = 21/" buildozer.spec
-            sed -i "s/^android.sdk =.*/android.sdk = 34/" buildozer.spec
-            # Версия и путь к NDK
-            sed -i "s/^android.ndk =.*/android.ndk = r27d/" buildozer.spec
-            sed -i "s|^android.ndk_path =.*|android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r27d|" buildozer.spec
+            # Удаляем устаревший параметр android.sdk
+            sed -i "/^android.sdk =.*/d" buildozer.spec
+            # Версия и путь к NDK (теперь r29)
+            sed -i "s/^android.ndk =.*/android.ndk = r29/" buildozer.spec
+            sed -i "s|^android.ndk_path =.*|android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r29|" buildozer.spec
             # Дополнительные настройки (опционально)
             sed -i "s/^orientation =.*/orientation = portrait/" buildozer.spec
             sed -i "s/^fullscreen =.*/fullscreen = 1/" buildozer.spec
@@ -233,7 +225,8 @@ jobs:
             export PATH='$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH'
             
             # Выполняем сборку с повторными попытками
-            for i in {1..3}; do
+            i=1
+            while [ $i -le 3 ]; do
               echo 'Attempt #'$i' to build APK...'
               if buildozer -v android debug; then
                 echo 'Build successful!'
@@ -241,6 +234,7 @@ jobs:
               else
                 echo 'Build failed, retrying in 10s...'
                 sleep 10
+                i=$((i + 1))
               fi
             done
           "
@@ -259,3 +253,4 @@ jobs:
             ${{ github.workspace }}/*.apk
             ${{ github.workspace }}/bin/*.apk
           if-no-files-found: warn
+
