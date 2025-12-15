@@ -22,7 +22,6 @@ jobs:
         with:
           python-version: '3.11'
 
-
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -33,23 +32,22 @@ jobs:
             libglib2.0-dev \
             unzip \
             tar \
-            wget
+            wget \
+            curl
 
       - name: Install Python packages
         run: |
           pip install --upgrade pip
           pip install cython buildozer kivy
 
-
       # Принудительное принятие лицензий SDK
-      - name: Accept Android SDK licenses (force)
+      - name: Accept Android SDK licenses
         run: |
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
           echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb13bb94731" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
 
-
-      # Установка Java 17 (требуется для sdkmanager)
+      # Установка Java 17
       - name: Set up Java 17
         uses: actions/setup-java@v3
         with:
@@ -57,7 +55,7 @@ jobs:
           distribution: 'temurin'
 
 
-      # Установка cmdline-tools с учётом возможной смены структуры архива
+      # Установка cmdline-tools с проверкой структуры архива
       - name: Install Android cmdline-tools
         run: |
           SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
@@ -66,15 +64,12 @@ jobs:
           cd $CMDLINE_DIR
 
 
-          # Скачиваем архив
-          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-
-
-          # Распаковываем
+          # Скачиваем и распаковываем
+          curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q cmdline-tools.zip
 
 
-          # Ищем распакованную папку (может быть "cmdline-tools" или "cmdline-tools-<версия>")
+          # Определяем распакованную папку
           UNPACKED_DIR=""
           if [ -d "cmdline-tools" ]; then
             UNPACKED_DIR="cmdline-tools"
@@ -85,27 +80,22 @@ jobs:
             exit 1
           fi
 
-          # Переименовываем в "latest" и перемещаем
+          # Переименовываем в "latest"
           mv $UNPACKED_DIR latest
 
 
-          # Проверяем, что sdkmanager существует
+          # Проверяем наличие sdkmanager
           if [ ! -f "latest/bin/sdkmanager" ]; then
             echo "ERROR: sdkmanager not found in $UNPACKED_DIR/bin!"
-            ls -R latest/  # Для отладки: показываем содержимое
+            ls -R latest/  # Отладка
             exit 1
           fi
 
-
-          # Удаляем архив
           rm cmdline-tools.zip
-
-
-          # Добавляем в PATH
           echo "$CMDLINE_DIR/latest/bin" >> $GITHUB_PATH
 
 
-      # Установка platform-tools и build-tools через sdkmanager
+      # Установка platform-tools и build-tools
       - name: Install Android platform-tools and build-tools
         run: |
           SDK_MANAGER=$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager
@@ -119,28 +109,37 @@ jobs:
             buildozer init
           fi
           sed -i 's/^requirements =.*/requirements = python3,kivy,cython/' buildozer.spec
-          sed -i 's/^platform =.*/platform = android/' buildozer.spec
+          sed -i 's/^android.api =.*/android.api = 33/' buildozer.spec
+          sed -i 's/^android.minapi =.*/android.minapi = 21/' buildozer.spec
+          sed -i 's/^android.sdk =.*/android.sdk = 34/' buildozer.spec
+          sed -i 's/^android.ndk =.*/android.ndk = r25b/' buildozer.spec
 
 
-      # Настройка окружения (с явным указанием путей)
+      # Настройка окружения
       - name: Configure environment
         run: |
           JAVA_HOME=$(dirname $(dirname $(which javac)))
           ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-          ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk
-
+          ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b
 
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
 
+      # Пропуск автоматической установки SDK/NDK Buildozer'ом
+      - name: Skip Buildozer SDK/NDK auto-install
+        run: |
+          # Удаляем возможные некорректные настройки
+          sed -i '/android.sdk_dir/d' buildozer.spec
+          sed -i '/android.ndk_dir/d' buildozer.spec
 
-      # Обновление SDK и NDK через Buildozer (теперь с корректными путями)
-      - name: Install Android SDK and NDK via Buildozer
-        run: buildozer android update
+          # Указываем явные пути
+          echo "android.sdk_dir = $ANDROID_HOME" >> buildozer.spec
+          echo "android.ndk_dir = $ANDROID_NDK_HOME" >> buildozer.spec
 
-      # Сборка APK
+
+      # Сборка APK (без попытки обновления SDK/NDK)
       - name: Build APK with Buildozer
         run: buildozer android debug
         env:
@@ -148,7 +147,7 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
 
-      # Сохранение APK как артефакта
+      # Сохранение APK
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
