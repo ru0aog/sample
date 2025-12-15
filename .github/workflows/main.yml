@@ -8,20 +8,27 @@ on:
     branches:
       - main
 
-
 jobs:
   build-android:
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04
       options: --shm-size=2g
-      setup: |
-        useradd -m -u 1001 runner
-        chown -R runner:runner /home/runner
 
     steps:
+      - name: Create non-root user
+        run: |
+          useradd -m -u 1001 runner
+          chown -R runner:runner /home/runner
+          # Передаём UID/GID в окружение для последующих шагов
+          echo "RUNNER_UID=1001" >> $GITHUB_ENV
+          echo "RUNNER_GID=1001" >> $GITHUB_ENV
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        # Выполняем checkout от имени runner
+        run: sudo -u runner -H git clone https://github.com/${{ github.repository }} . || sudo -u runner -H git pull
+
 
       - name: Install dependencies (as root)
         run: |
@@ -44,19 +51,13 @@ jobs:
           pip3 install --upgrade pip setuptools wheel
           pip3 install cython buildozer kivy==2.2.1
 
-
-      - name: Install Python packages
-        run: |
-          pip3 install --upgrade pip
-          pip3 install cython buildozer kivy==2.2.1
-
-      # Остальные шаги (лицензии SDK, Java, cmdline-tools и т.д.) — без изменений
       - name: Accept Android SDK licenses
         run: |
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb13bb94731" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-
+          sudo -u runner -H sh -c '
+            mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
+            echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+            echo "d56f5187479451eabf01fb78af6dfcb13bb94731" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+          '
 
       - name: Set up Java 17
         uses: actions/setup-java@v3
@@ -67,9 +68,9 @@ jobs:
 
       - name: Install Android cmdline-tools
         run: |
-          SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
           CMDLINE_DIR=$SDK_ROOT/cmdline-tools
-          mkdir -p $CMDLINE_DIR
+          sudo -u runner -H mkdir -p $CMDLINE_DIR
           cd $CMDLINE_DIR
 
           curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
@@ -86,7 +87,7 @@ jobs:
             exit 1
           fi
 
-          mv $UNPACKED_DIR latest
+          sudo -u runner -H mv $UNPACKED_DIR latest
 
 
           if [ ! -f "latest/bin/sdkmanager" ]; then
@@ -101,33 +102,36 @@ jobs:
 
       - name: Install Android platform-tools and build-tools
         run: |
-          SDK_MANAGER=$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager
-          $SDK_MANAGER --install "platform-tools" "build-tools;36.1.0"
+          SDK_MANAGER=/home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager
+          sudo -u runner -H $SDK_MANAGER --install "platform-tools" "build-tools;36.1.0"
 
 
       - name: Create fake tools/bin directory
         run: |
-          SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-          mkdir -p $SDK_ROOT/tools/bin
-          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
+          SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
+          sudo -u runner -H mkdir -p $SDK_ROOT/tools/bin
+          sudo -u runner -H ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
 
 
       - name: Prepare buildozer spec
         run: |
-          if [ ! -f buildozer.spec ]; then
-            buildozer init
-          fi
-          sed -i 's/^requirements =.*/requirements = python3,kivy,cython/' buildozer.spec
-          sed -i 's/^android.api =.*/android.api = 33/' buildozer.spec
-          sed -i 's/^android.minapi =.*/android.minapi = 21/' buildozer.spec
-          sed -i 's/^android.sdk =.*/android.sdk = 34/' buildozer.spec
-          sed -i 's/^android.ndk =.*/android.ndk = r25b/' buildozer.spec
+          sudo -u runner -H sh -c '
+            cd $GITHUB_WORKSPACE &&
+            if [ ! -f buildozer.spec ]; then
+              buildozer init
+            fi
+            sed -i "s/^requirements =.*/requirements = python3,kivy,cython/" buildozer.spec
+            sed -i "s/^android.api =.*/android.api = 33/" buildozer.spec
+            sed -i "s/^android.minapi =.*/android.minapi = 21/" buildozer.spec
+            sed -i "s/^android.sdk =.*/android.sdk = 34/" buildozer.spec
+            sed -i "s/^android.ndk =.*/android.ndk = r25b/" buildozer.spec
+          '
 
       - name: Configure environment
         run: |
           JAVA_HOME=$(dirname $(dirname $(which javac)))
-          ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-          ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b
+          ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
+          ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
 
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
@@ -144,6 +148,7 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
           JAVA_HOME: ${{ env.JAVA_HOME }}
+
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
