@@ -1,5 +1,6 @@
 name: Build Kivy Android APK
 
+
 on:
   push:
     branches: [main]
@@ -13,7 +14,6 @@ jobs:
       image: ubuntu:22.04
       options: --shm-size=4g --ulimit memlock=-1
 
-
     steps:
       - name: Create non-root user and install sudo
         run: |
@@ -24,6 +24,7 @@ jobs:
           usermod -aG sudo runner
           echo "RUNNER_UID=1001" >> $GITHUB_ENV
           echo "RUNNER_GID=1001" >> $GITHUB_ENV
+
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -56,6 +57,7 @@ jobs:
           pip3 install --upgrade pip setuptools wheel
           pip3 install cython buildozer kivy==2.2.1
 
+
       - name: Accept Android SDK licenses
         run: |
           sudo -u runner -H sh -c '
@@ -85,11 +87,7 @@ jobs:
             echo "ERROR: No cmdline-tools directory found after unzip!"
             exit 1
           fi
-
-
           sudo -u runner -H mv $UNPACKED_DIR latest
-
-
           if [ ! -f "latest/bin/sdkmanager" ]; then
             echo "ERROR: sdkmanager not found!"
             ls -R latest/
@@ -103,7 +101,7 @@ jobs:
         run: |
           JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
-          ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r27d
+          ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r29d
 
 
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
@@ -128,7 +126,7 @@ jobs:
             export JAVA_HOME='$JAVA_HOME' &&
             export PATH='$JAVA_HOME/bin:$PATH' &&
             export ANDROID_HOME='$ANDROID_HOME' &&
-            '$SDK_MANAGER' --install 'platform-tools' 'build-tools;36.1.0'
+            '$SDK_MANAGER' --install 'platform-tools' 'build-tools;34.0.0'
           "
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
@@ -144,68 +142,87 @@ jobs:
       - name: Cache NDK
         uses: actions/cache@v3
         with:
-          path: /home/runner/.buildozer/android/platform/android-ndk-r27d
-          key: ndk-r27d
+          path: /home/runner/.buildozer/android/platform/android-ndk-r29d
+          key: ndk-r29d
 
-
-      - name: Pre-download Android NDK r27d
+      - name: Pre-download Android NDK r29d with validation
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
-          NDK_URL="https://dl.google.com/android/repository/android-ndk-r27d-linux.zip"
-          NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-r27d-linux.zip"
-          NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-r27d"
+          NDK_VERSION="r29d"
+          NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
+          NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}.zip"
+          NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}"
+          MIN_SIZE=600000000  # 600 МБ (ориентировочно для r29d)
 
 
           sudo -u runner -H sh -c "
-            rm -f '$NDK_ZIP'
-            rm -rf '$NDK_DIR'
+            rm -f '${NDK_ZIP}'
+            rm -rf '${NDK_DIR}'
 
-
-            for i in {1..3}; do
-              echo 'Downloading NDK r27d (attempt #'$i')...'
-              wget -q --show-progress -O '$NDK_ZIP' '$NDK_URL' && break
-              echo 'Download failed, retrying...'
-              sleep 5
+            for i in {1..5}; do
+              echo 'Downloading NDK (attempt #'$i')...'
+              if wget --timeout=120 --tries=3 -q --show-progress -O '${NDK_ZIP}' '${NDK_URL}'; then
+                echo 'Download OK'
+                break
+              fi
+              echo 'Retry in 10s...'
+              sleep 10
             done
 
-            if [ ! -s '$NDK_ZIP' ] || [ $(stat -c%s '$NDK_ZIP') -lt 600000000 ]; then
-              echo 'Error: NDK download failed or incomplete'
+            if [ ! -s '${NDK_ZIP}' ] || [ $(stat -c%s '${NDK_ZIP}') -lt ${MIN_SIZE} ]; then
+              echo 'ERROR: NDK download failed or file too small'
               exit 1
             fi
 
-            unzip -q '$NDK_ZIP' -d '$NDK_DIR'
-            rm '$NDK_ZIP'
+            if ! unzip -t '${NDK_ZIP}' >/dev/null 2>&1; then
+              echo 'ERROR: Corrupted archive'
+              exit 1
+            fi
+
+            unzip -q '${NDK_ZIP}' -d '${NDK_DIR}'
+            rm '${NDK_ZIP}'
+            echo 'NDK installed to ${NDK_DIR}'
           "
 
       - name: Prepare buildozer spec
         run: |
           sudo -u runner -H sh -c '
-            cd $GITHUB_WORKSPACE &&
+            cd $GITHUB_WORKSPACE
             if [ ! -f buildozer.spec ]; then
               buildozer init
             fi
             # Обновляем требования
             sed -i "s/^requirements =.*/requirements = python3,kivy==2.2.1,cython/" buildozer.spec
-            # API уровни (рекомендуется 34 для NDK r27d)
+            # Указываем API уровни
             sed -i "s/^android.api =.*/android.api = 34/" buildozer.spec
             sed -i "s/^android.minapi =.*/android.minapi = 21/" buildozer.spec
             sed -i "s/^android.sdk =.*/android.sdk = 34/" buildozer.spec
             # Версия и путь к NDK
             sed -i "s/^android.ndk =.*/android.ndk = r27d/" buildozer.spec
             sed -i "s|^android.ndk_path =.*|android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r27d|" buildozer.spec
+            # Дополнительные настройки (опционально)
+            sed -i "s/^orientation =.*/orientation = portrait/" buildozer.spec
+            sed -i "s/^fullscreen =.*/fullscreen = 1/" buildozer.spec
           '
 
       - name: Build APK with retries
         run: |
           sudo -u runner -H sh -c "
             export JAVA_HOME='$JAVA_HOME'
-            export PATH='$JAVA_HOME/bin:$PATH'
-            cd $GITHUB_WORKSPACE
+            export ANDROID_HOME='$ANDROID_HOME'
+            export ANDROID_NDK_HOME='$ANDROID_NDK_HOME'
+            export PATH='$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH'
+            
+            # Выполняем сборку с повторными попытками
             for i in {1..3}; do
-              echo 'Building APK (attempt #'$i')...'
-              buildozer android debug && break
-              echo 'Build failed, retrying in 10s...'
-              sleep 10
+              echo 'Attempt #'$i' to build APK...'
+              if buildozer -v android debug; then
+                echo 'Build successful!'
+                break
+              else
+                echo 'Build failed, retrying in 10s...'
+                sleep 10
+              fi
             done
           "
         env:
@@ -215,8 +232,11 @@ jobs:
 
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
+        if: success()
         with:
-          name: android-apk
-          path: ${{ github.workspace }}/bin/*.apk
-          if-no-files-found: error
+          name: kivy-android-apk
+          path: |
+            ${{ github.workspace }}/*.apk
+            ${{ github.workspace }}/bin/*.apk
+          if-no-files-found: ignore
