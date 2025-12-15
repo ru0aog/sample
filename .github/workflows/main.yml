@@ -21,6 +21,7 @@ jobs:
 
       - name: Clean buildozer cache
         run: rm -rf .buildozer
+
       - name: Install system dependencies
         run: |
           apt-get update
@@ -32,26 +33,31 @@ jobs:
             unzip \
             tar \
             wget \
-            curl
+            curl \
+            python3 \
+            python3-pip \
+            python3-venv
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      # Явная проверка и установка pip
+      - name: Ensure pip is available
+        run: |
+          python3 -m ensurepip --upgrade
+          python3 -m pip install --upgrade pip setuptools wheel
+
 
       - name: Install Python packages
         run: |
-          pip install --upgrade pip
-          pip install cython buildozer kivy==2.2.1
+          pip3 install --upgrade pip
+          pip3 install cython buildozer kivy==2.2.1
 
-      # Принятие лицензий SDK
+      # Остальные шаги (лицензии SDK, Java, cmdline-tools и т.д.) — без изменений
       - name: Accept Android SDK licenses
         run: |
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
           echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb13bb94731" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
 
-      # Установка Java 17
+
       - name: Set up Java 17
         uses: actions/setup-java@v3
         with:
@@ -59,7 +65,6 @@ jobs:
           distribution: 'temurin'
 
 
-      # Установка cmdline-tools
       - name: Install Android cmdline-tools
         run: |
           SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
@@ -69,6 +74,7 @@ jobs:
 
           curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q cmdline-tools.zip
+
 
           UNPACKED_DIR=""
           if [ -d "cmdline-tools" ]; then
@@ -82,6 +88,7 @@ jobs:
 
           mv $UNPACKED_DIR latest
 
+
           if [ ! -f "latest/bin/sdkmanager" ]; then
             echo "ERROR: sdkmanager not found!"
             ls -R latest/
@@ -91,23 +98,20 @@ jobs:
           rm cmdline-tools.zip
           echo "$CMDLINE_DIR/latest/bin" >> $GITHUB_PATH
 
-      # Установка platform-tools и build-tools
+
       - name: Install Android platform-tools and build-tools
         run: |
           SDK_MANAGER=$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager
           $SDK_MANAGER --install "platform-tools" "build-tools;36.1.0"
 
 
-      # Создание «фальшивой» директории tools/bin для Buildozer
       - name: Create fake tools/bin directory
         run: |
           SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
           mkdir -p $SDK_ROOT/tools/bin
-          # Создаём символическую ссылку на реальный sdkmanager
           ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
 
 
-      # Подготовка buildozer.spec
       - name: Prepare buildozer spec
         run: |
           if [ ! -f buildozer.spec ]; then
@@ -119,7 +123,6 @@ jobs:
           sed -i 's/^android.sdk =.*/android.sdk = 34/' buildozer.spec
           sed -i 's/^android.ndk =.*/android.ndk = r25b/' buildozer.spec
 
-      # Настройка окружения
       - name: Configure environment
         run: |
           JAVA_HOME=$(dirname $(dirname $(which javac)))
@@ -131,8 +134,6 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
 
-
-      # Сборка APK
       - name: Build APK
         run: buildozer android debug
         env:
@@ -140,7 +141,6 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
           JAVA_HOME: ${{ env.JAVA_HOME }}
 
-      # Сохранение APK
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
