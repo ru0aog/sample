@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04
-      options: --shm-size=2g
+      options: --shm-size=4g --ulimit memlock=-1
+
 
     steps:
       - name: Create non-root user and install sudo
@@ -26,6 +27,7 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+
 
       - name: Fix repository ownership
         run: chown -R runner:runner $GITHUB_WORKSPACE
@@ -49,12 +51,10 @@ jobs:
             git \
             openjdk-17-jdk
 
-
       - name: Upgrade pip and install Python packages
         run: |
           pip3 install --upgrade pip setuptools wheel
           pip3 install cython buildozer kivy==2.2.1
-
 
       - name: Accept Android SDK licenses
         run: |
@@ -86,6 +86,7 @@ jobs:
             exit 1
           fi
 
+
           sudo -u runner -H mv $UNPACKED_DIR latest
 
 
@@ -94,16 +95,16 @@ jobs:
             ls -R latest/
             exit 1
           fi
-
           rm cmdline-tools.zip
           echo "$CMDLINE_DIR/latest/bin" >> $GITHUB_PATH
 
+
       - name: Configure environment
         run: |
-          # Явно задаём JAVA_HOME (не полагаемся на which javac)
           JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
-          ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
+          ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r27d
+
 
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
@@ -133,11 +134,56 @@ jobs:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
+
       - name: Create fake tools/bin directory
         run: |
           SDK_ROOT=$ANDROID_HOME
           sudo -u runner -H mkdir -p $SDK_ROOT/tools/bin
           sudo -u runner -H ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
+
+
+      - name: Validate NDK URL
+        run: |
+          curl -fsI https://dl.google.com/android/repository/android-ndk-r27d-linux-x86_64.zip \
+            | grep -q "200 OK" || \
+            (echo "Error: NDK URL invalid" && exit 1)
+
+
+      - name: Cache NDK
+        uses: actions/cache@v3
+        with:
+          path: /home/runner/.buildozer/android/platform/android-ndk-r27d
+          key: ndk-r27d
+
+
+      - name: Pre-download Android NDK r27d
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        run: |
+          NDK_URL="https://dl.google.com/android/repository/android-ndk-r27d-linux-x86_64.zip"
+          NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-r27d.zip"
+          NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-r27d"
+
+
+          sudo -u runner -H sh -c "
+            rm -f '$NDK_ZIP'
+            rm -rf '$NDK_DIR'
+
+
+            for i in {1..3}; do
+              echo 'Downloading NDK r27d (attempt #'$i')...'
+              wget -q --show-progress -O '$NDK_ZIP' '$NDK_URL' && break
+              echo 'Download failed, retrying...'
+              sleep 5
+            done
+
+            if [ ! -s '$NDK_ZIP' ] || [ $(stat -c%s '$NDK_ZIP') -lt 600000000 ]; then
+              echo 'Error: NDK download failed or incomplete'
+              exit 1
+            fi
+
+            unzip -q '$NDK_ZIP' -d '$NDK_DIR'
+            rm '$NDK_ZIP'
+          "
 
       - name: Prepare buildozer spec
         run: |
@@ -146,20 +192,29 @@ jobs:
             if [ ! -f buildozer.spec ]; then
               buildozer init
             fi
-            sed -i "s/^requirements =.*/requirements = python3,kivy,cython/" buildozer.spec
-            sed -i "s/^android.api =.*/android.api = 33/" buildozer.spec
+            # Обновляем требования
+            sed -i "s/^requirements =.*/requirements = python3,kivy==2.2.1,cython/" buildozer.spec
+            # API уровни (рекомендуется 34 для NDK r27d)
+            sed -i "s/^android.api =.*/android.api = 34/" buildozer.spec
             sed -i "s/^android.minapi =.*/android.minapi = 21/" buildozer.spec
             sed -i "s/^android.sdk =.*/android.sdk = 34/" buildozer.spec
-            sed -i "s/^android.ndk =.*/android.ndk = r25b/" buildozer.spec
+            # Версия и путь к NDK
+            sed -i "s/^android.ndk =.*/android.ndk = r27d/" buildozer.spec
+            sed -i "s|^android.ndk_path =.*|android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r27d|" buildozer.spec
           '
 
-      - name: Build APK as non-root
+      - name: Build APK with retries
         run: |
           sudo -u runner -H sh -c "
-            export JAVA_HOME='$JAVA_HOME' &&
-            export PATH='$JAVA_HOME/bin:$PATH' &&
-            cd $GITHUB_WORKSPACE &&
-            buildozer android debug
+            export JAVA_HOME='$JAVA_HOME'
+            export PATH='$JAVA_HOME/bin:$PATH'
+            cd $GITHUB_WORKSPACE
+            for i in {1..3}; do
+              echo 'Building APK (attempt #'$i')...'
+              buildozer android debug && break
+              echo 'Build failed, retrying in 10s...'
+              sleep 10
+            done
           "
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
