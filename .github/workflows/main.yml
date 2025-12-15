@@ -144,7 +144,7 @@ jobs:
 
       - name: Validate NDK URL
         run: |
-          curl -fsI https://dl.google.com/android/repository/android-ndk-r27d-linux-x86_64.zip \
+          curl -fsI https://dl.google.com/android/repository/android-ndk-r27d-linux.zip \
             | grep -q "200 OK" || \
             (echo "Error: NDK URL invalid" && exit 1)
 
