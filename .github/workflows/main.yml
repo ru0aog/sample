@@ -11,33 +11,31 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-22.04
+    container:
+      image: ubuntu:22.04
+      options: --shm-size=2g
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Clean buildozer cache
+        run: rm -rf .buildozer
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev libffi-dev libglib2.0-dev unzip tar wget curl
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libssl-dev \
-            libffi-dev \
-            libglib2.0-dev \
-            unzip \
-            tar \
-            wget \
-            curl
-
       - name: Install Python packages
         run: |
           pip install --upgrade pip
-          pip install cython buildozer kivy
+          pip install cython buildozer kivy==2.2.1
 
       # Принятие лицензий SDK
       - name: Accept Android SDK licenses
@@ -128,12 +126,12 @@ jobs:
 
 
       # Сборка APK
-      - name: Build APK with Buildozer
+      - name: Build APK
         run: buildozer android debug
         env:
-          JAVA_HOME: ${{ env.JAVA_HOME }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+          JAVA_HOME: ${{ env.JAVA_HOME }}
 
       # Сохранение APK
       - name: Upload APK artifact
