@@ -151,7 +151,7 @@ jobs:
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
           NDK_VERSION="r29"
-          NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}.zip"
+          NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}-linux.zip"
           NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}"
 
           sudo -u runner -H sh -c "
