@@ -141,14 +141,6 @@ jobs:
           sudo -u runner -H mkdir -p $SDK_ROOT/tools/bin
           sudo -u runner -H ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
 
-
-      - name: Validate NDK URL
-        run: |
-          curl -fsI https://dl.google.com/android/repository/android-ndk-r27d-linux.zip \
-            | grep -q "200 OK" || \
-            (echo "Error: NDK URL invalid" && exit 1)
-
-
       - name: Cache NDK
         uses: actions/cache@v3
         with:
@@ -159,7 +151,7 @@ jobs:
       - name: Pre-download Android NDK r27d
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
-          NDK_URL="https://dl.google.com/android/repository/android-ndk-r27d-linux-x86_64.zip"
+          NDK_URL="https://dl.google.com/android/repository/android-ndk-r27d-linux.zip"
           NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-r27d.zip"
           NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-r27d"
 
