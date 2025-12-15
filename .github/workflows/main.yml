@@ -18,13 +18,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
+      
       # 2. Устанавливаем Python и зависимости
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
+      
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -66,7 +66,13 @@ jobs:
           echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk" >> $GITHUB_ENV
 
 
-      # 6. Собираем APK
+      # 6. Устанавливаем Android SDK и NDK через Buildozer (если ещё не установлены)
+      - name: Install Android SDK and NDK
+        run: |
+          buildozer android update
+
+
+      # 7. Собираем APK
       - name: Build APK with Buildozer
         run: buildozer android debug
         env:
@@ -75,7 +81,7 @@ jobs:
           ANDROID_NDK_HOME: $HOME/.buildozer/android/platform/android-ndk
 
 
-      # 7. Сохраняем APK как артефакт
+      # 8. Сохраняем APK как артефакт
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
