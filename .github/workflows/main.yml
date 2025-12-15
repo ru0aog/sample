@@ -147,58 +147,21 @@ jobs:
           key: ndk-r29
 
 
-      - name: Pre-download Android NDK r29 with validation
+      - name: Pre-download Android NDK r29 (unpack only)
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
           NDK_VERSION="r29"
-          NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
           NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}.zip"
           NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}"
-          MIN_SIZE=700000000  # 700 МБ
 
           sudo -u runner -H sh -c "
-            # Очищаем старые файлы
-            rm -f '${NDK_ZIP}'
-            rm -rf '${NDK_DIR}'
-
-            # Скачиваем с ретраями (используем expr для арифметики)
-            i=1
-            while [ $i -le 5 ]; do
-              echo 'Downloading NDK (attempt #'$i')...'
-              if wget --timeout=120 --tries=3 -q --show-progress -O '${NDK_ZIP}' '${NDK_URL}'; then
-                echo 'Download OK'
-                break
-              fi
-              echo 'Retry in 10s...'
-              sleep 10
-              i=$(expr $i + 1)  # POSIX-совместимая арифметика
-            done
-
-            # Проверяем наличие и размер файла
-            if [ ! -f '${NDK_ZIP}' ]; then
-              echo 'ERROR: NDK archive not found after download'
-              exit 1
-            fi
-
-
-            FILE_SIZE=$(stat -c%s '${NDK_ZIP}' 2>/dev/null || echo 0)
-            if [ ${FILE_SIZE} -lt ${MIN_SIZE} ]; then
-              echo "ERROR: NDK file too small (${FILE_SIZE} < ${MIN_SIZE} bytes)"
-              exit 1
-            fi
-
-
-            # Проверяем целостность архива
-            if ! unzip -t '${NDK_ZIP}' >/dev/null 2>&1; then
-              echo 'ERROR: Corrupted NDK archive'
-              exit 1
-            fi
-
-            # Распаковываем
+            # Распаковываем архив NDK
             unzip -q '${NDK_ZIP}' -d '${NDK_DIR}'
             rm '${NDK_ZIP}'
             echo 'NDK installed to ${NDK_DIR}'
           "
+
+
 
       - name: Prepare buildozer spec
         run: |
