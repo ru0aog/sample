@@ -154,7 +154,12 @@ jobs:
           NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}.zip"
           NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}"
 
-          sudo -u runner -H sh -c unzip -q '${NDK_ZIP}' -d '${NDK_DIR}' rm '${NDK_ZIP}' echo 'NDK installed to ${NDK_DIR}'
+          sudo -u runner -H sh -c "
+            unzip -q '${NDK_ZIP}' -d '${NDK_DIR}' &&
+            rm '${NDK_ZIP}' &&
+            echo 'NDK installed to ${NDK_DIR}'
+          "
+
 
 
 
