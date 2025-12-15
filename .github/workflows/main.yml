@@ -14,15 +14,14 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # 1. Клонируем репозиторий
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Устанавливаем Python и зависимости
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -32,41 +31,53 @@ jobs:
             libffi-dev \
             libglib2.0-dev \
             unzip \
-            tar
+            tar \
+            wget
 
-      # 3. Устанавливаем Python‑пакеты
       - name: Install Python packages
         run: |
           pip install --upgrade pip
           pip install cython buildozer kivy
 
 
-      - name: Install SDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: 'latest'
-          accept-android-sdk-licenses: true
-          log-accepted-android-sdk-licenses: true
-
-      # 5. Устанавливаем Android SDK Build-Tools
-      - name: Install Android Build-Tools
+      # Ключевой шаг: принудительно принимаем ВСЕ лицензии SDK
+      - name: Accept Android SDK licenses (force)
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;36.1.0"
+          # Создаём директорию для SDK, если её нет
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
+          # Кладем файл с принятыми лицензиями
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb13bb94731" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
 
 
-      # 6. Создаём buildozer.spec, если его нет
+      # Устанавливаем cmdline-tools (если ещё не установлены)
+      - name: Install Android cmdline-tools
+        run: |
+          SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK_ROOT/cmdline-tools
+          cd $SDK_ROOT/cmdline-tools
+          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools-* latest
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+
+
+      # Устанавливаем platform-tools и build-tools
+      - name: Install Android platform-tools and build-tools
+        run: |
+          sdkmanager="~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager"
+          $sdkmanager --install "platform-tools" "build-tools;36.1.0"
+
+
       - name: Prepare buildozer spec
         run: |
           if [ ! -f buildozer.spec ]; then
             buildozer init
           fi
-          # Обновляем requirements в spec
           sed -i 's/^requirements =.*/requirements = python3,kivy,cython/' buildozer.spec
-          # Указываем платформу
           sed -i 's/^platform =.*/platform = android/' buildozer.spec
 
 
-      # 7. Настраиваем переменные окружения
       - name: Configure Java environment
         run: |
           export JAVA_HOME=/usr/lib/jvm/temurin-11-jdk-amd64
@@ -77,12 +88,10 @@ jobs:
           echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk" >> $GITHUB_ENV
 
 
-      # 8. Устанавливаем Android SDK и NDK через Buildozer
-      - name: Install Android SDK and NDK
+      - name: Install Android SDK and NDK via Buildozer
         run: buildozer android update
 
 
-      # 9. Собираем APK
       - name: Build APK with Buildozer
         run: buildozer android debug
         env:
@@ -91,7 +100,6 @@ jobs:
           ANDROID_NDK_HOME: $HOME/.buildozer/android/platform/android-ndk
 
 
-      # 10. Сохраняем APK как артефакт
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
