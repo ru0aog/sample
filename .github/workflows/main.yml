@@ -1,6 +1,5 @@
 name: Build Kivy Android APK
 
-
 on:
   push:
     branches: [main]
@@ -25,13 +24,11 @@ jobs:
           echo "RUNNER_UID=1001" >> $GITHUB_ENV
           echo "RUNNER_GID=1001" >> $GITHUB_ENV
 
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Fix repository ownership
         run: chown -R runner:runner $GITHUB_WORKSPACE
-
 
       - name: Install dependencies
         run: |
@@ -76,7 +73,6 @@ jobs:
           sudo -u runner -H mkdir -p $CMDLINE_DIR
           cd $CMDLINE_DIR
 
-
           curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q cmdline-tools.zip
 
@@ -103,17 +99,18 @@ jobs:
           echo "$CMDLINE_DIR/latest/bin" >> $GITHUB_PATH
 
 
-
       - name: Configure environment
         run: |
           JAVA_HOME=$(dirname $(dirname $(which javac)))
           ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
           ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
 
+
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+
 
       - name: Debug environment (опционально)
         run: |
@@ -126,7 +123,6 @@ jobs:
       - name: Install Android platform-tools and build-tools
         run: |
           SDK_MANAGER=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
-
           sudo -u runner -H sh -c "
             export JAVA_HOME='$JAVA_HOME' &&
             export PATH='$JAVA_HOME/bin:$PATH' &&
@@ -137,10 +133,9 @@ jobs:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-
       - name: Create fake tools/bin directory
         run: |
-          SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
+          SDK_ROOT=$ANDROID_HOME
           sudo -u runner -H mkdir -p $SDK_ROOT/tools/bin
           sudo -u runner -H ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
 
@@ -157,18 +152,6 @@ jobs:
             sed -i "s/^android.sdk =.*/android.sdk = 34/" buildozer.spec
             sed -i "s/^android.ndk =.*/android.ndk = r25b/" buildozer.spec
           '
-
-      - name: Configure environment
-        run: |
-          JAVA_HOME=$(dirname $(dirname $(which javac)))
-          ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
-          ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
-
-          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
-          echo "PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
-
 
       - name: Build APK as non-root
         run: |
