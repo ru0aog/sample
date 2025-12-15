@@ -1,0 +1,82 @@
+name: Build Kivy Android APK
+
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+
+permissions:
+  contents: read
+  packages: write
+
+
+concurrency:
+  group: build-kivy-apk
+  cancel-in-progress: true
+
+
+jobs:
+  build-android:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+
+      - name: Install buildozer and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-setuptools python3-venv
+          pip install --upgrade pip
+          pip install buildozer kivy
+
+
+      - name: Prepare buildozer spec
+        run: |
+          # Если buildozer.spec отсутствует — создаём его
+          if [ ! -f buildozer.spec ]; then
+            buildozer init
+          fi
+          # Гарантируем корректные настройки для Android
+          sed -i 's/^title =.*/title = Hello Kivy App/' buildozer.spec
+          sed -i 's/^package.name =.*/package.name = hellokivy/' buildozer.spec
+          sed -i 's/^package.domain =.*/package.domain = org.test/' buildozer.spec
+          sed -i 's/^source.dir =.*/source.dir = ./' buildozer.spec
+          sed -i 's/^source.include_exts =.*/source.include_exts = py/' buildozer.spec
+          sed -i 's/^version =.*/version = 0.1/' buildozer.spec
+          sed -i 's/^requirements =.*/requirements = python3,kivy/' buildozer.spec
+          sed -i 's/^orientation =.*/orientation = portrait/' buildozer.spec
+          sed -i 's/^android.api =.*/android.api = 31/' buildozer.spec
+          sed -i 's/^android.minapi =.*/android.minapi = 21/' buildozer.spec
+          sed -i 's/^android.sdk =.*/android.sdk = 31/' buildozer.spec
+          sed -i 's/^android.ndk =.*/android.ndk = 25b/' buildozer.spec
+
+
+      - name: Install Android NDK/SDK via buildozer
+        run: |
+          # Создаём dummy-файл, чтобы buildozer не жаловался на отсутствие main.py при инициализации
+          echo "print('Hello World')" > main.py
+          buildozer android debug
+
+        env:
+          # Для сборки под Android нужны эти переменные
+          JAVA_HOME: /usr/lib/jvm/default-java
+          ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
+          ANDROID_NDK_HOME: $HOME/.buildozer/android/platform/android-ndk
+
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HelloKivy-APK
+          path: bin/*.apk
+          if-no-files-found: error
