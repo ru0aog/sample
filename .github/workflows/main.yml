@@ -1,3 +1,4 @@
+
 name: Build Kivy Android APK
 
 
@@ -14,7 +15,6 @@ jobs:
       image: ubuntu:22.04
       options: --shm-size=4g --ulimit memlock=-1
 
-
     steps:
       - name: Create non-root user and install sudo
         run: |
@@ -28,6 +28,7 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+
 
       - name: Fix repository ownership
         run: chown -R runner:runner $GITHUB_WORKSPACE
@@ -56,6 +57,7 @@ jobs:
           pip3 install --upgrade pip setuptools wheel
           pip3 install cython buildozer kivy==2.2.1
 
+
       - name: Accept Android SDK licenses
         run: |
           sudo -u runner -H sh -c '
@@ -64,6 +66,7 @@ jobs:
             echo "d56f5187479451eabf01fb78af6dfcb13bb94731" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
           '
 
+
       - name: Install Android cmdline-tools
         run: |
           SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
@@ -71,8 +74,10 @@ jobs:
           sudo -u runner -H mkdir -p $CMDLINE_DIR
           cd $CMDLINE_DIR
 
+
           curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q cmdline-tools.zip
+
 
           UNPACKED_DIR=""
           if [ -d "cmdline-tools" ]; then
@@ -136,10 +141,11 @@ jobs:
 
 
       - name: Cache NDK
-        uses: actions/cache@v4  # Обновлён до v4
+        uses: actions/cache@v4
         with:
           path: /home/runner/.buildozer/android/platform/android-ndk-r29
           key: ndk-r29
+
 
       - name: Pre-download Android NDK r29 with validation
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -150,14 +156,12 @@ jobs:
           NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}"
           MIN_SIZE=700000000  # 700 МБ
 
-
           sudo -u runner -H sh -c "
             # Очищаем старые файлы
             rm -f '${NDK_ZIP}'
             rm -rf '${NDK_DIR}'
 
-
-            # Скачиваем с ретраями (используем классический цикл)
+            # Скачиваем с ретраями (используем expr для арифметики)
             i=1
             while [ $i -le 5 ]; do
               echo 'Downloading NDK (attempt #'$i')...'
@@ -167,21 +171,23 @@ jobs:
               fi
               echo 'Retry in 10s...'
               sleep 10
-              i=$((i + 1))
+              i=$(expr $i + 1)  # POSIX-совместимая арифметика
             done
 
-           # Проверяем наличие и размер файла
+            # Проверяем наличие и размер файла
             if [ ! -f '${NDK_ZIP}' ]; then
               echo 'ERROR: NDK archive not found after download'
               exit 1
             fi
+
 
             FILE_SIZE=$(stat -c%s '${NDK_ZIP}' 2>/dev/null || echo 0)
             if [ ${FILE_SIZE} -lt ${MIN_SIZE} ]; then
               echo "ERROR: NDK file too small (${FILE_SIZE} < ${MIN_SIZE} bytes)"
               exit 1
             fi
- 
+
+
             # Проверяем целостность архива
             if ! unzip -t '${NDK_ZIP}' >/dev/null 2>&1; then
               echo 'ERROR: Corrupted NDK archive'
@@ -201,6 +207,7 @@ jobs:
             if [ ! -f buildozer.spec ]; then
               buildozer init
             fi
+
             # Обновляем требования
             sed -i "s/^requirements =.*/requirements = python3,kivy==2.2.1,cython/" buildozer.spec
             # Указываем API уровни
@@ -219,11 +226,12 @@ jobs:
       - name: Build APK with retries
         run: |
           sudo -u runner -H sh -c "
-            export JAVA_HOME='$JAVA_HOME'
-            export ANDROID_HOME='$ANDROID_HOME'
-            export ANDROID_NDK_HOME='$ANDROID_NDK_HOME'
-            export PATH='$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH'
-            
+            export JAVA_HOME=$JAVA_HOME
+            export ANDROID_HOME=$ANDROID_HOME
+            export ANDROID_NDK_HOME=$ANDROID_NDK_HOME
+            export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+
+
             # Выполняем сборку с повторными попытками
             i=1
             while [ $i -le 3 ]; do
@@ -234,7 +242,7 @@ jobs:
               else
                 echo 'Build failed, retrying in 10s...'
                 sleep 10
-                i=$((i + 1))
+                i=$(expr $i + 1)  # Используем expr вместо $((...))
               fi
             done
           "
@@ -253,4 +261,3 @@ jobs:
             ${{ github.workspace }}/*.apk
             ${{ github.workspace }}/bin/*.apk
           if-no-files-found: warn
-
