@@ -147,18 +147,37 @@ jobs:
           key: ndk-r29
 
 
-      - name: Pre-download Android NDK r29 (unpack only)
+      - name: Pre-download Android NDK r29 (with download and unpack)
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
           NDK_VERSION="r29"
+          # Исправляем имя файла: добавляем "-linux"
           NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}-linux.zip"
           NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}"
+          # URL теперь соответствует реальному имени файла
+          NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
 
+
+          # Скачиваем NDK
+          echo "Downloading NDK from ${NDK_URL}..."
           sudo -u runner -H sh -c "
-            unzip -q '${NDK_ZIP}' -d '${NDK_DIR}' &&
-            rm '${NDK_ZIP}' &&
+            wget --timeout=120 --tries=3 -q -O '${NDK_ZIP}' '${NDK_URL}'
+          "
+
+          # Проверяем, что файл скачался и не пустой
+          if [ ! -f "${NDK_ZIP}" ] || [ ! -s "${NDK_ZIP}" ]; then
+            echo "ERROR: Failed to download NDK archive: ${NDK_ZIP}"
+            exit 1
+          fi
+
+          # Распаковываем
+          echo "Unpacking NDK to ${NDK_DIR}..."
+          sudo -u runner -H sh -c "
+            unzip -q '${NDK_ZIP}' -d '${NDK_DIR}' && \
+            rm '${NDK_ZIP}' && \
             echo 'NDK installed to ${NDK_DIR}'
           "
+
 
 
 
