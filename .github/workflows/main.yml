@@ -203,7 +203,6 @@ jobs:
             sed -i "s/^fullscreen =.*/fullscreen = 1/" buildozer.spec
           '
 
-
       - name: Build APK with retries
         run: |
           sudo -u runner -H sh -c "
@@ -214,17 +213,17 @@ jobs:
             cd '$GITHUB_WORKSPACE'
 
             i=1
-            # Используем test с -le (POSIX-совместимо)
-            while test $i -le 3; do
-              echo 'Attempt #'$i' to build APK...'
+            # Используем -lt 4 (эквивалентно i <= 3)
+            while [ \"\$i\" -lt 4 ]; do
+              echo 'Attempt #'\$i' to build APK...'
               if buildozer -v android debug; then
                 echo 'Build successful!'
                 break
               else
                 echo 'Build failed, retrying in 10s...'
                 sleep 10
-                # Инкремент через expr (гарантированно работает в /bin/sh)
-                i=$(expr $i + 1)
+                # Инкремент через expr (работает в /bin/sh)
+                i=\$(expr \$i + 1)
               fi
             done
           "
@@ -232,6 +231,7 @@ jobs:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+
 
 
 
