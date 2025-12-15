@@ -103,21 +103,36 @@ jobs:
           echo "$CMDLINE_DIR/latest/bin" >> $GITHUB_PATH
 
 
+
       - name: Configure environment
         run: |
           JAVA_HOME=$(dirname $(dirname $(which javac)))
           ANDROID_HOME=/home/runner/.buildozer/android/platform/android-sdk
           ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
+
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
 
+      - name: Debug environment (опционально)
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          which java && java -version
+          ls -la $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+
 
       - name: Install Android platform-tools and build-tools
         run: |
           SDK_MANAGER=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
-          sudo -u runner -H sh -c "'$SDK_MANAGER' --install 'platform-tools' 'build-tools;36.1.0'"
+
+          sudo -u runner -H sh -c "
+            export JAVA_HOME='$JAVA_HOME' &&
+            export PATH='$JAVA_HOME/bin:$PATH' &&
+            export ANDROID_HOME='$ANDROID_HOME' &&
+            '$SDK_MANAGER' --install 'platform-tools' 'build-tools;36.1.0'
+          "
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
