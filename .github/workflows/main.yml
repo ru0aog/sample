@@ -1,6 +1,5 @@
 name: Build Kivy Android APK
 
-
 on:
   push:
     branches:
@@ -40,7 +39,7 @@ jobs:
           pip install --upgrade pip
           pip install cython buildozer kivy
 
-      # Принудительное принятие лицензий SDK
+      # Принятие лицензий SDK
       - name: Accept Android SDK licenses
         run: |
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
@@ -55,7 +54,7 @@ jobs:
           distribution: 'temurin'
 
 
-      # Установка cmdline-tools с проверкой структуры архива
+      # Установка cmdline-tools
       - name: Install Android cmdline-tools
         run: |
           SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
@@ -63,13 +62,9 @@ jobs:
           mkdir -p $CMDLINE_DIR
           cd $CMDLINE_DIR
 
-
-          # Скачиваем и распаковываем
           curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q cmdline-tools.zip
 
-
-          # Определяем распакованную папку
           UNPACKED_DIR=""
           if [ -d "cmdline-tools" ]; then
             UNPACKED_DIR="cmdline-tools"
@@ -80,26 +75,31 @@ jobs:
             exit 1
           fi
 
-          # Переименовываем в "latest"
           mv $UNPACKED_DIR latest
 
-
-          # Проверяем наличие sdkmanager
           if [ ! -f "latest/bin/sdkmanager" ]; then
-            echo "ERROR: sdkmanager not found in $UNPACKED_DIR/bin!"
-            ls -R latest/  # Отладка
+            echo "ERROR: sdkmanager not found!"
+            ls -R latest/
             exit 1
           fi
 
           rm cmdline-tools.zip
           echo "$CMDLINE_DIR/latest/bin" >> $GITHUB_PATH
 
-
       # Установка platform-tools и build-tools
       - name: Install Android platform-tools and build-tools
         run: |
           SDK_MANAGER=$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager
           $SDK_MANAGER --install "platform-tools" "build-tools;36.1.0"
+
+
+      # Создание «фальшивой» директории tools/bin для Buildozer
+      - name: Create fake tools/bin directory
+        run: |
+          SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK_ROOT/tools/bin
+          # Создаём символическую ссылку на реальный sdkmanager
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
 
 
       # Подготовка buildozer.spec
@@ -114,7 +114,6 @@ jobs:
           sed -i 's/^android.sdk =.*/android.sdk = 34/' buildozer.spec
           sed -i 's/^android.ndk =.*/android.ndk = r25b/' buildozer.spec
 
-
       # Настройка окружения
       - name: Configure environment
         run: |
@@ -127,19 +126,8 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
 
-      # Пропуск автоматической установки SDK/NDK Buildozer'ом
-      - name: Skip Buildozer SDK/NDK auto-install
-        run: |
-          # Удаляем возможные некорректные настройки
-          sed -i '/android.sdk_dir/d' buildozer.spec
-          sed -i '/android.ndk_dir/d' buildozer.spec
 
-          # Указываем явные пути
-          echo "android.sdk_dir = $ANDROID_HOME" >> buildozer.spec
-          echo "android.ndk_dir = $ANDROID_NDK_HOME" >> buildozer.spec
-
-
-      # Сборка APK (без попытки обновления SDK/NDK)
+      # Сборка APK
       - name: Build APK with Buildozer
         run: buildozer android debug
         env:
