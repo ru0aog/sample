@@ -8,21 +8,22 @@ on:
     branches:
       - main
 
+
 jobs:
   build-android:
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04
       options: --shm-size=2g
+      setup: |
+        useradd -m -u 1001 runner
+        chown -R runner:runner /home/runner
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Clean buildozer cache
-        run: rm -rf .buildozer
-
-      - name: Install system and Python dependencies
+      - name: Install dependencies (as root)
         run: |
           apt-get update
           apt-get install -y \
@@ -38,7 +39,7 @@ jobs:
             python3-pip \
             python3-venv
 
-      - name: Upgrade pip and install packages
+      - name: Upgrade pip and install Python packages (as root)
         run: |
           pip3 install --upgrade pip setuptools wheel
           pip3 install cython buildozer kivy==2.2.1
@@ -133,8 +134,12 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Build APK
-        run: buildozer android debug
+      - name: Build APK as non-root
+        run: |
+          sudo -u runner -H sh -c "
+            cd $GITHUB_WORKSPACE &&
+            buildozer android debug
+          "
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
