@@ -147,34 +147,56 @@ jobs:
 
 
 
-      - name: Pre-download Android NDK r29b
+      - name: Pre-download Android NDK r29 with validation
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
-          NDK_URL="https://dl.google.com/android/repository/android-ndk-r29-linux.zip"
-          NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-r29-linux.zip"
-          NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-r29"
-
+          NDK_VERSION="r29"
+          NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
+          NDK_ZIP="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}.zip"
+          NDK_DIR="/home/runner/.buildozer/android/platform/android-ndk-${NDK_VERSION}"
+          MIN_SIZE=700000000  # 700 МБ (ориентировочно для r29)
 
           sudo -u runner -H sh -c "
-            rm -f '$NDK_ZIP'
-            rm -rf '$NDK_DIR'
+            # Очищаем старые файлы
+            rm -f '${NDK_ZIP}'
+            rm -rf '${NDK_DIR}'
 
 
-            for i in {1..3}; do
-              echo 'Downloading NDK r25b (attempt #'$i')...'
-              wget -q --show-progress -O '$NDK_ZIP' '$NDK_URL' && break
-              echo 'Download failed, retrying...'
-              sleep 5
+            # Скачиваем с ретраями
+            for i in {1..5}; do
+              echo 'Downloading NDK (attempt #'$i')...'
+              if wget --timeout=120 --tries=3 -q --show-progress -O '${NDK_ZIP}' '${NDK_URL}'; then
+                echo 'Download OK'
+                break
+              fi
+              echo 'Retry in 10s...'
+              sleep 10
             done
 
-            if [ ! -s '$NDK_ZIP' ] || [ $(stat -c%s '$NDK_ZIP') -lt 500000000 ]; then
-              echo 'Error: NDK download failed or incomplete'
+            # Проверяем наличие и размер файла
+            if [ ! -f '${NDK_ZIP}' ]; then
+              echo 'ERROR: NDK archive not found after download'
               exit 1
             fi
 
-            unzip -q '$NDK_ZIP' -d '$NDK_DIR'
-            rm '$NDK_ZIP'
+            FILE_SIZE=$(stat -c%s '${NDK_ZIP}' 2>/dev/null || echo 0)
+            if [ ${FILE_SIZE} -lt ${MIN_SIZE} ]; then
+              echo "ERROR: NDK file too small (${FILE_SIZE} < ${MIN_SIZE} bytes)"
+              exit 1
+            fi
+
+            # Проверяем целостность архива
+            if ! unzip -t '${NDK_ZIP}' >/dev/null 2>&1; then
+              echo 'ERROR: Corrupted NDK archive'
+              exit 1
+            fi
+
+            # Распаковываем
+            unzip -q '${NDK_ZIP}' -d '${NDK_DIR}'
+            rm '${NDK_ZIP}'
+            echo 'NDK installed to ${NDK_DIR}'
           "
+
 
 
 
