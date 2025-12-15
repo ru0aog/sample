@@ -16,12 +16,21 @@ jobs:
       options: --shm-size=2g
 
     steps:
-      - name: Create non-root user
+      - name: Create non-root user and install sudo
         run: |
+          apt-get update
+          apt-get install -y sudo
           useradd -m -u 1001 runner
           chown -R runner:runner /home/runner
+          usermod -aG sudo runner
           echo "RUNNER_UID=1001" >> $GITHUB_ENV
           echo "RUNNER_GID=1001" >> $GITHUB_ENV
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fix repository ownership (без sudo)
+        run: chown -R runner:runner $GITHUB_WORKSPACE
 
       # Шаг 1: Стандартный checkout (от имени root)
       - name: Checkout repository
