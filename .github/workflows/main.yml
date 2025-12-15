@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [main]
 
+
 jobs:
   build-android:
     runs-on: ubuntu-22.04
@@ -23,6 +24,7 @@ jobs:
           usermod -aG sudo runner
           echo "RUNNER_UID=1001" >> $GITHUB_ENV
           echo "RUNNER_GID=1001" >> $GITHUB_ENV
+
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,7 +46,8 @@ jobs:
             curl \
             python3 \
             python3-pip \
-            python3-venv
+            python3-venv \
+            git
 
       - name: Upgrade pip and install Python packages
         run: |
