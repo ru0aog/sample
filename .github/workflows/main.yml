@@ -38,6 +38,7 @@ jobs:
           pip install --upgrade pip
           pip install cython buildozer kivy
 
+
       # Принудительное принятие лицензий SDK
       - name: Accept Android SDK licenses (force)
         run: |
@@ -46,7 +47,15 @@ jobs:
           echo "d56f5187479451eabf01fb78af6dfcb13bb94731" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
 
 
-      # Установка cmdline-tools с обработкой разных форматов архива
+      # Установка Java 17 (требуется для sdkmanager)
+      - name: Set up Java 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+
+      # Установка cmdline-tools
       - name: Install Android cmdline-tools
         run: |
           SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
@@ -54,34 +63,30 @@ jobs:
           mkdir -p $CMDLINE_DIR
           cd $CMDLINE_DIR
 
-          # Скачиваем и распаковываем
+
           wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
 
 
-          # Ищем распакованную папку и переименовываем в "latest"
           if [ -d "cmdline-tools" ]; then
             mv cmdline-tools latest
-          elif ls cmdline-tools-* 1> /dev/null 2>&1; then
+          elif ls cmdline-tools-* 1>/dev/null 2>&1; then
             mv cmdline-tools-* latest
           else
             echo "ERROR: No cmdline-tools directory found after unzip!"
             exit 1
           fi
 
-          # Удаляем архив
           rm cmdline-tools.zip
-
-
-          # Добавляем в PATH
           echo "$CMDLINE_DIR/latest/bin" >> $GITHUB_PATH
 
 
-      # Установка platform-tools и build-tools
+      # Установка platform-tools и build-tools (теперь с Java 17)
       - name: Install Android platform-tools and build-tools
         run: |
           SDK_MANAGER=$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager
           $SDK_MANAGER --install "platform-tools" "build-tools;36.1.0"
+
 
       # Подготовка buildozer.spec
       - name: Prepare buildozer spec
@@ -92,10 +97,11 @@ jobs:
           sed -i 's/^requirements =.*/requirements = python3,kivy,cython/' buildozer.spec
           sed -i 's/^platform =.*/platform = android/' buildozer.spec
 
-      # Настройка окружения Java
+
+      # Настройка окружения (теперь JAVA_HOME указывает на Java 17)
       - name: Configure Java environment
         run: |
-          JAVA_HOME=/usr/lib/jvm/temurin-11-jdk-amd64
+          JAVA_HOME=$(dirname $(dirname $(which javac)))
           export JAVA_HOME
           export PATH=$JAVA_HOME/bin:$PATH
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
@@ -113,7 +119,7 @@ jobs:
       - name: Build APK with Buildozer
         run: buildozer android debug
         env:
-          JAVA_HOME: /usr/lib/jvm/temurin-11-jdk-amd64
+          JAVA_HOME: ${{ env.JAVA_HOME }}
           ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
           ANDROID_NDK_HOME: $HOME/.buildozer/android/platform/android-ndk
 
