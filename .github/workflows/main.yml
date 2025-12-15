@@ -18,13 +18,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      
       # 2. Устанавливаем Python и зависимости
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -43,7 +41,18 @@ jobs:
           pip install cython buildozer kivy
 
 
-      # 4. Создаём buildozer.spec, если его нет
+      # 4. Принимаем лицензии Android SDK
+      - name: Accept Android SDK licenses
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+
+      # 5. Устанавливаем Android SDK Build-Tools
+      - name: Install Android Build-Tools
+        run: |
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;36.1.0"
+
+
+      # 6. Создаём buildozer.spec, если его нет
       - name: Prepare buildozer spec
         run: |
           if [ ! -f buildozer.spec ]; then
@@ -55,7 +64,7 @@ jobs:
           sed -i 's/^platform =.*/platform = android/' buildozer.spec
 
 
-      # 5. Настраиваем переменные окружения для Java
+      # 7. Настраиваем переменные окружения
       - name: Configure Java environment
         run: |
           export JAVA_HOME=/usr/lib/jvm/temurin-11-jdk-amd64
@@ -66,13 +75,12 @@ jobs:
           echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk" >> $GITHUB_ENV
 
 
-      # 6. Устанавливаем Android SDK и NDK через Buildozer (если ещё не установлены)
+      # 8. Устанавливаем Android SDK и NDK через Buildozer
       - name: Install Android SDK and NDK
-        run: |
-          buildozer android update
+        run: buildozer android update
 
 
-      # 7. Собираем APK
+      # 9. Собираем APK
       - name: Build APK with Buildozer
         run: buildozer android debug
         env:
@@ -81,7 +89,7 @@ jobs:
           ANDROID_NDK_HOME: $HOME/.buildozer/android/platform/android-ndk
 
 
-      # 8. Сохраняем APK как артефакт
+      # 10. Сохраняем APK как артефакт
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
