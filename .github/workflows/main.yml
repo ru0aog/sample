@@ -20,16 +20,20 @@ jobs:
         run: |
           useradd -m -u 1001 runner
           chown -R runner:runner /home/runner
-          # Передаём UID/GID в окружение для последующих шагов
           echo "RUNNER_UID=1001" >> $GITHUB_ENV
           echo "RUNNER_GID=1001" >> $GITHUB_ENV
 
+      # Шаг 1: Стандартный checkout (от имени root)
       - name: Checkout repository
         uses: actions/checkout@v4
-        # Выполняем checkout от имени runner
-        run: sudo -u runner -H git clone https://github.com/${{ github.repository }} . || sudo -u runner -H git pull
+
+      # Шаг 2: Передаём права на файлы пользователю runner
+      - name: Fix repository ownership
+        run: |
+          sudo -u runner -H chown -R runner:runner $GITHUB_WORKSPACE
 
 
+      # Остальные шаги (установка зависимостей и т.д.)
       - name: Install dependencies (as root)
         run: |
           apt-get update
@@ -45,6 +49,7 @@ jobs:
             python3 \
             python3-pip \
             python3-venv
+
 
       - name: Upgrade pip and install Python packages (as root)
         run: |
