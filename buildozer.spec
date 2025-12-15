@@ -10,8 +10,9 @@ orientation = portrait
 
 android.api = 31
 android.minapi = 21
-android.sdk = 34
-android.ndk = r25b
+android.sdk = 36
+android.ndk = r29
 
 [buildozer]
 log_level = 2
+
