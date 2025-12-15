@@ -232,11 +232,11 @@ jobs:
 
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: success()
         with:
           name: kivy-android-apk
           path: |
             ${{ github.workspace }}/*.apk
             ${{ github.workspace }}/bin/*.apk
-          if-no-files-found: ignore
+          if-no-files-found: warn
